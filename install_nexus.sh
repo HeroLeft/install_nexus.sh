@@ -1,13 +1,13 @@
 #!/bin/bash
 # Скрипт для автоматической установки Nexus (прувера) и всех необходимых зависимостей.
-# Если оперативной памяти меньше 8GB, автоматически создается swap-файл.
+# Если оперативной памяти меньше 8GB, автоматически создается swap-файл (7GB) с использованием fallocate.
 # В конце установка Nexus CLI запускается в сессии screen.
 #
 # Пример запуска:
 # curl -sSL https://raw.githubusercontent.com/HeroLeft/install_nexus.sh/main/install_nexus.sh | bash
 #
-# В процессе установки, когда Nexus CLI запросит подтверждение, выберите "y",
-# затем опцию "2" и введите свой уникальный Node ID (это делается вручную).
+# В процессе установки, когда Nexus CLI запросит подтверждение,
+# выберите "y", затем опцию "2" и введите свой уникальный Node ID.
 
 set -e  # Прерываем выполнение при ошибке
 
@@ -30,7 +30,7 @@ rustup update
 
 echo "------------------------------------------------"
 echo "Устанавливаем protoc (версия 25.2)..."
-# Устанавливаем и затем удаляем системный protobuf-compiler для обновления до нужной версии
+# Сначала устанавливаем системный protobuf-compiler, затем удаляем его для установки нужной версии
 sudo apt install -y protobuf-compiler
 sudo apt remove -y protobuf-compiler
 curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.2/protoc-25.2-linux-x86_64.zip
@@ -46,8 +46,8 @@ echo "Проверяем объем оперативной памяти..."
 TOTAL_MEM=$(free -m | awk '/^Mem:/{print $2}')
 echo "Общий объем RAM: ${TOTAL_MEM} MB"
 if [ "$TOTAL_MEM" -lt 8000 ]; then
-    echo "Объем RAM меньше 8GB, создаем swap-файл..."
-    sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+    echo "Объем RAM меньше 8GB, создаем swap-файл размером 7GB..."
+    sudo fallocate -l 7G /swapfile
     sudo chmod 600 /swapfile
     sudo mkswap /swapfile
     sudo swapon /swapfile
@@ -65,13 +65,13 @@ screen -S nexus -dm bash -c "echo 'Установка Nexus CLI начнется
 echo "------------------------------------------------"
 echo "Установка запущена в сессии screen 'nexus'."
 echo "------------------------------------------------"
-echo "Теперь подключитесь к сессии для интерактивной части установки:"
+echo "Подключитесь к сессии для интерактивной части установки:"
 echo "   screen -r nexus"
 echo ""
 echo "В процессе установки вам потребуется:"
 echo "   1. Нажать 'y' для подтверждения установки."
 echo "   2. Выбрать опцию '2' для ввода Node ID."
-echo "   3. Ввести свой уникальный Node ID (его вы получили на сайте)."
+echo "   3. Ввести свой уникальный Node ID (полученный на сайте)."
 echo ""
 echo "После ввода всех данных дождитесь завершения компиляции (около 10-15 минут)."
 echo "------------------------------------------------"
