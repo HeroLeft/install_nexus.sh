@@ -1,30 +1,27 @@
 #!/bin/bash
-# Скрипт для автоматической установки Nexus CLI (прувера) и всех зависимостей.
-# Запускать с правами sudo (или под root).
-# Пример запуска:
-#   curl -sSL https://raw.githubusercontent.com/<YOUR_GITHUB_USER>/<REPO_NAME>/main/install_nexus.sh | bash
+# Скрипт для автоматической установки Nexus (прувера) и всех необходимых зависимостей.
+# Если оперативной памяти меньше 8GB, автоматически создается swap-файл.
+# В конце установка Nexus CLI запускается в сессии screen.
 #
-# Где <YOUR_GITHUB_USER> — ваш логин на GitHub,
-#     <REPO_NAME>        — имя репозитория.
+# Пример запуска:
+# curl -sSL https://raw.githubusercontent.com/HeroLeft/install_nexus.sh/main/install_nexus.sh | bash
+#
+# В процессе установки, когда Nexus CLI запросит подтверждение, выберите "y",
+# затем опцию "2" и введите свой уникальный Node ID (это делается вручную).
 
-set -e  # Прерывать выполнение при возникновении ошибки
-
-echo "------------------------------------------------"
-echo "Шаг 1. Обновление системы"
-echo "------------------------------------------------"
-sudo apt update -y && sudo apt upgrade -y
+set -e  # Прерываем выполнение при ошибке
 
 echo "------------------------------------------------"
-echo "Шаг 2. Установка необходимых пакетов"
+echo "Nexus. Устанавливаем прувер"
+echo "CryptoFortochka — гайды, ноды, новости, тестнеты"
 echo "------------------------------------------------"
-sudo apt install -y build-essential pkg-config libssl-dev git-all cargo unzip screen
 
-# В некоторых гайдах фигурирует protobuf-compiler из репозиториев, устанавливаем, потом обновляем до нужной версии
-sudo apt install -y protobuf-compiler
+echo "Обновляем систему и устанавливаем базовые пакеты..."
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y build-essential pkg-config libssl-dev git-all cargo unzip screen curl wget
 
 echo "------------------------------------------------"
-echo "Шаг 3. Установка и настройка Rust"
-echo "------------------------------------------------"
+echo "Устанавливаем и настраиваем Rust..."
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source $HOME/.cargo/env
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
@@ -32,8 +29,9 @@ source ~/.bashrc
 rustup update
 
 echo "------------------------------------------------"
-echo "Шаг 4. Установка и настройка protoc (v25.2)"
-echo "------------------------------------------------"
+echo "Устанавливаем protoc (версия 25.2)..."
+# Устанавливаем и затем удаляем системный protobuf-compiler для обновления до нужной версии
+sudo apt install -y protobuf-compiler
 sudo apt remove -y protobuf-compiler
 curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.2/protoc-25.2-linux-x86_64.zip
 unzip protoc-25.2-linux-x86_64.zip -d $HOME/.local
@@ -44,18 +42,47 @@ source ~/.bashrc
 protoc --version
 
 echo "------------------------------------------------"
-echo "Шаг 5. Запуск официального скрипта Nexus CLI в screen"
-echo "------------------------------------------------"
-# Создаём новую сессию screen с именем "nexus" и запускаем внутри неё установку Nexus
-screen -S nexus -dm bash -c "curl https://cli.nexus.xyz/ | sh; exec bash"
+echo "Проверяем объем оперативной памяти..."
+TOTAL_MEM=$(free -m | awk '/^Mem:/{print $2}')
+echo "Общий объем RAM: ${TOTAL_MEM} MB"
+if [ "$TOTAL_MEM" -lt 8000 ]; then
+    echo "Объем RAM меньше 8GB, создаем swap-файл..."
+    sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    echo "Swap успешно добавлен."
+else
+    echo "Достаточно оперативной памяти – swap не требуется."
+fi
 
 echo "------------------------------------------------"
-echo "Установка завершена!"
+echo "Создаем сессию screen для установки Nexus CLI..."
+# Создаем новую сессию screen с именем "nexus" и запускаем установку Nexus CLI внутри неё
+screen -S nexus -dm bash -c "echo 'Установка Nexus CLI начнется через 5 секунд...'; sleep 5; curl https://cli.nexus.xyz/ | sh; exec bash"
+
 echo "------------------------------------------------"
-echo "1) Подключитесь к сессии командой: screen -r nexus"
-echo "2) Когда Nexus CLI запросит, нажмите 'y' (если потребуется)."
-echo "3) Дождитесь окончания компиляции (10-15 минут)."
-echo "4) Выберите '2', чтобы привязать Node ID."
-echo "5) Вставьте свой Node ID и нажмите Enter."
+echo "Установка запущена в сессии screen 'nexus'."
 echo "------------------------------------------------"
-echo "Для выхода из screen нажмите: Ctrl+A, затем D."
+echo "Теперь подключитесь к сессии для интерактивной части установки:"
+echo "   screen -r nexus"
+echo ""
+echo "В процессе установки вам потребуется:"
+echo "   1. Нажать 'y' для подтверждения установки."
+echo "   2. Выбрать опцию '2' для ввода Node ID."
+echo "   3. Ввести свой уникальный Node ID (его вы получили на сайте)."
+echo ""
+echo "После ввода всех данных дождитесь завершения компиляции (около 10-15 минут)."
+echo "------------------------------------------------"
+echo "Чтобы свернуть сессию screen, нажмите: Ctrl+A, затем D."
+echo "Чтобы вернуться к сессии, используйте: screen -r nexus"
+echo "------------------------------------------------"
+echo "Дополнительные команды (при возникновении ошибок):"
+echo "   cd ~/.nexus/network-api/clients/cli"
+echo "   cargo build --release"
+echo "   rustup target add riscv32i-unknown-none-elf"
+echo "   ./target/release/nexus-network --start --beta"
+echo "------------------------------------------------"
+echo "Чтобы удалить ноду, выполните:"
+echo "   screen -S nexus -X quit && rm -rf ~/.nexus/"
